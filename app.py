@@ -7,6 +7,9 @@ from sklearn.metrics import classification_report, confusion_matrix, mean_square
 from xgboost import XGBClassifier, XGBRegressor
 import matplotlib.pyplot as plt
 import re
+from io import StringIO
+import docx2txt
+import PyPDF2
 
 st.set_page_config(page_title="Employee Prediction App", layout="wide")
 st.title("🧠 Employee Attrition & Performance Prediction")
@@ -86,25 +89,44 @@ if uploaded_file is not None:
             st.write(f"🧾 Predicted Attrition: {'Yes' if pred_attrition == 1 else 'No'}")
             st.write(f"⭐ Predicted Performance Rating: {pred_performance:.2f}")
 
-    # 📄 Resume Analysis Section
-    st.header("📎 Resume-Based Role & Skill Analysis")
-    resume_text = st.text_area("Paste Resume Text Here", height=200)
+    # 📄 Resume Upload & Analysis Section
+    st.header("📎 Resume Upload for Role & Skill Match")
+    resume_file = st.file_uploader("Upload Resume (PDF, DOCX, TEX)", type=["pdf", "docx", "tex"])
 
-    if resume_text:
-        keywords = set(re.findall(r'\b\w+\b', resume_text.lower()))
-        feature_names = set(X.columns.str.lower())
-        matched_features = keywords & feature_names
-        st.write("🔍 Matched Features from Resume:")
-        st.write(", ".join(matched_features) if matched_features else "No features matched.")
+    def extract_text(file):
+        if file.name.endswith(".pdf"):
+            reader = PyPDF2.PdfReader(file)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text()
+            return text
+        elif file.name.endswith(".docx"):
+            return docx2txt.process(file)
+        elif file.name.endswith(".tex"):
+            return StringIO(file.getvalue().decode("utf-8")).read()
+        return ""
 
-        # Display suggestion based on overlap
-        matched_ratio = len(matched_features) / len(feature_names)
-        if matched_ratio >= 0.5:
-            st.success("✅ Resume aligns well with the dataset features and roles.")
-        elif 0.2 <= matched_ratio < 0.5:
-            st.warning("⚠️ Partial match found. Consider adding more relevant experience or skills.")
-        else:
-            st.error("❌ Resume does not align well with dataset roles. Please revise.")
+    if resume_file is not None:
+        resume_text = extract_text(resume_file)
+        if resume_text:
+            st.subheader("📝 Extracted Resume Text")
+            st.text_area("Resume Preview", resume_text[:3000], height=200)
+
+            # Keyword analysis
+            keywords = set(re.findall(r'\b\w+\b', resume_text.lower()))
+            feature_names = set(X.columns.str.lower())
+            matched_features = keywords & feature_names
+
+            st.write("🔍 Matched Features from Resume:")
+            st.write(", ".join(matched_features) if matched_features else "No features matched.")
+
+            matched_ratio = len(matched_features) / len(feature_names)
+            if matched_ratio >= 0.5:
+                st.success("✅ Resume aligns well with dataset features and roles.")
+            elif 0.2 <= matched_ratio < 0.5:
+                st.warning("⚠️ Partial match found. Consider adding more relevant experience or skills.")
+            else:
+                st.error("❌ Resume does not align well with dataset roles. Please revise.")
 
 else:
     st.info("Upload a CSV file to get started.")
